@@ -1,0 +1,3 @@
+":passwd\n": "cat /etc/passwd"
+":shadow\n": "cat /etc/shadow"
+":release\n": "cat /etc/*-release"

